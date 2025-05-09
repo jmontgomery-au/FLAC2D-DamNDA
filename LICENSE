@@ -1,6 +1,14 @@
 MIT License
 
-Copyright (c) 2025 jmontgomery-au
+Copyright (c) 2025 Jack Montgomery, jmontgomery@auburn.edu
+
+Disclaimer: This code was created as a teaching and research tool 
+and NOT as a template for building an engineering analysis. The code is 
+not intended to be used for any purpose other than teaching and academic 
+research. The code is provided without any implied warranty of fitness for 
+any purpose or use whatsoever. Users should seek advice from a licensed 
+professional engineer with experience in performing liquefaction analyses 
+of dams before using any part of this code for any purpose other than teaching.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
