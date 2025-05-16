@@ -1,0 +1,74 @@
+;--------------------------------------------------------
+;   Liquefaction Analyses for the Upper San Fernando Dam - FLAC2D
+;
+;         File to call each analysis stage
+;			
+;         Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;Copyright (c) 2025 Jack Montgomery, except where noted
+;
+;Disclaimer: This code was created as a teaching and research tool 
+;and NOT as a template for building an engineering analysis. The code is 
+;not intended to be used for any purpose other than teaching and academic 
+;research. The code is provided without any implied warranty of fitness for 
+;any purpose or use whatsoever. Users should seek advice from a licensed 
+;professional engineer with experience in performing liquefaction analyses 
+;of dams before using any part of this code for any purpose other than teaching.
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+;
+;Extra Variables for zones
+;extra index 1 = Ko (set by [plot_ko_alpha])
+;extra index 2 = Alpha (set by [plot_ko_alpha])
+;extra index 3 = Vertical effective stress (sigvo') at end of dynamic setup (set by [store_stresses])
+;extra index 4 = Pore pressure at end of dynamic setup (set by [store_stresses])
+;extra index 5 = Excess pore pressure ratio (ru = 1 - sigv'/sigvo') (set by [StoreRu])
+;extra index 6 = Maximum excess pore pressure ratio (set by [StoreRu])
+;extra index 7 = Engineering shear strain (gamma = 2* ssi) (set by [StoreRu], reset by [CheckLiq])
+;extra index 8 = Liquefied strength ratio (Su_res/sigvo') (set by [AssignLiq])
+;extra index 9 
+;extra index 10 = Drained strength using pre-earthquake stress (set by [DefinePSProps])
+;extra index 11 = Liquefied strength (Su_res) (set by [AssignLiq])
+;extra index 12 = Shear modulus using post-shaking stresses and reduction factors
+;extra index 13 = Bulk modulus using post-shaking stresses and reduction factors
+;--------------------------------------------------------
+;           Runs each analysis stage individually
+;--------------------------------------------------------
+model new
+;
+; Definining some constants to use later
+def SetConstants
+    global _grav = 9.81 ;Gravity
+    global _patm = 101300.0 ; Atmospheric pressure
+    global _minstress = 0.05 * _patm ; Minimum stress to use for stress normalized calculations
+    global _waterdens = 1000.0  ; kg/m^3
+	global _waterUW = _waterdens * _grav
+end
+[SetConstants]
+; Bring in previously built mesh with proper group names for both zones and zone faces
+; The function uses the program version to determine which initialization approach to use. 
+def LoadGeom
+    if version.code.major = 900 then ; Using perpetual version
+        command
+            program call 'Import_Grid_Perpetual.dat'
+        endcommand
+    else
+        command
+            program call 'Import_Grid_Subscription.dat'
+        endcommand
+    endif
+end
+[LoadGeom]
+; Call the program files
+program call '1_BuildRock.dat'
+program call '2_BuildAlluvium.dat'
+program call '3_IniWT.dat'
+program call '4_BuildDam.dat'
+; program call '5_AddBerm.dat' This dam does not have a berm
+program call '6_RaiseRes.dat'
+program call '7_DynSetup.dat'
+program call '8_DynamicShake.dat'
+program call '9_QuietTime.dat'
+program call '10_ResStrength.dat'
