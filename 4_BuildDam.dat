@@ -1,0 +1,59 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 4: Build embankment portion of dam in lifts based on groups
+;   This file uses the group name "Phase" to build the dam in layers
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+model restore '3_IniWT' ; Restore previously saved state
+zone gridpoint ini displacement 0 0 ;set displacement to zero in x and y direction from previously restored model
+;
+; Fuction to build dam in lifts based on the number of groups
+; Each group name should be numbered with the lowest value corresponding to first lift
+fish define BuildDam
+   loop local i (1,8) ; Loop through lifts 1 - 8
+        ; 
+        ; Set group names for current lift using loop counter
+        local _CurPhase = string.build("Phase=%1",i) 
+
+        command
+            ; Set Mohr-Coulomb model for groups in next lift
+            zone cmodel mohr-coulomb range group [_CurPhase]
+            ;
+            ;Set Mohr-Coulomb and fluid properties for all newly created zones
+            [SetMCProps]
+            [SetFluidProps]
+            ;Start with dry dam
+            zone gridpoint ini saturation 0.0 range group [_CurPhase]
+            ;Initialize total stress conditions in new zones
+            zone initialize-stress ratio 0.5 range group [_CurPhase]
+            ;Solve for mechanical equilibrium
+            model mech active on
+            model fluid active off
+            ;Fully drained analysis
+            [SetFluidModulus(0.0)]
+            ;Set stress-dependent stiffness
+            [SetZoneStiffness]
+            ;Solve for equilibrium
+            model solve ratio 1E-5
+            ;
+            [set_ko(0.4,2.0)]   ;Adjust Ko to limits
+            [SetZoneStiffness]  ;Set stress-dependent stiffness
+            model solve ratio 1E-5 ;Solve for equilibrium
+            [plot_ko_alpha]   ;Store Ko and alpha
+        endcommand
+    endloop
+end
+[BuildDam]
+model save '4_BuildDam'

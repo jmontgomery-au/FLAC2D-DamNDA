@@ -1,0 +1,48 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 9: Solve for period of quiet time after shaking
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+model restore '8_DynamicShake'
+; Set variables needed for quiet time
+fish def _SetupQT
+	global _SlowTime = 1.0 ; Amount of time for base of model to slow before applying zero velocity conditions
+	global _QTime = 5.0 ; Amount of time for model to sit with static boundary conditions before applying residual strengths
+end
+[_SetupQT]
+; Increase rayleigh damping to help bring model back to equilibrium
+zone dynamic damping rayleigh 0.01 3.0
+;Start quiet time and adjust boundary conditions from dynamic
+fish def _RunQT
+	local $NextTime = dynamic.time.total + _SlowTime ; Set first amount of solve time to slow model
+	command
+		model solve dynamic time-total [$NextTime]
+	endcommand
+	$NextTime = dynamic.time.total + _QTime ; ; Set amount of quiet time to allow model to calm after changing BCs
+	command
+		;Remove current boundary conditions
+		zone face apply-remove stress-xy range group 'Base'
+        zone face apply-remove quiet range group 'Base'
+        zone dynamic free-field off
+		;Set velocities to zero along boundaries before fixing
+		zone gridpoint fix velocity (0.0,0.0) range group 'Base'
+        zone gridpoint fix velocity-x 0.0 range group 'US_Edge' or 'DS_Edge'
+		model solve dynamic time-total [$NextTime]
+	endcommand
+end
+[_RunQt]
+; Set rayleigh damping back to low value
+zone dynamic damping rayleigh 0.005 3.0
+model save '9_QuietTime'

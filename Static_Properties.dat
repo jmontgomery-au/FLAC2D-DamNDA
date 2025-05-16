@@ -1,0 +1,153 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;Store soil properties for static analysis and assign to zones by group
+;			
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+;
+; Create lists for storing zone properties
+[global z_dens = list.create(list.size(zone.list))] ; Density at zero saturation
+[global z_poro = list.create(list.size(zone.list))] ; Porosity 
+[global z_vs1 = list.create(list.size(zone.list))]  ; Shear wave velocity at one atmosphere (101.3 kPa)
+[global z_vsexp = list.create(list.size(zone.list))] ;Exponent for shear wave velocity stress dependence (Vs = Vs1 * (Sigm'/Pa)^Exp
+[global z_gred = list.create(list.size(zone.list),1.0)] ; Reduction in shear modulus for static stresses, defaults to 1.0 to use Gmax
+[global z_pois = list.create(list.size(zone.list),0.3)] ; Poisson's ratio to calculate bulk modulus
+[global z_coh = list.create(list.size(zone.list),0)]  ; Cohesion for Mohr-Coulomb Zones, otherwise zero
+[global z_fric = list.create(list.size(zone.list),0)] ; Friction angle for Mohr-Coulomb Zones, otherwise zero
+[global z_dila = list.create(list.size(zone.list),0)] ; Dilation angle for Mohr-Coulomb Zones, otherwise zero
+[global z_tens = list.create(list.size(zone.list),0)] ; Tensile Strength for Mohr-Coulomb Zones, otherwise zero
+[global z_cond_xx = list.create(list.size(zone.list))] ; Hydraulic conductivity in xx direction
+[global z_cond_yy = list.create(list.size(zone.list))] ; Hydraulic conductivity in yy direction
+;
+; Define static properties and store in lists for each zone
+fish define DefineProps
+    lst_ind = 0 ;reset list index
+    loop foreach local zpnt zone.list
+        lst_ind = lst_ind + 1 ;Increment list index to match number of zones
+        global z_group = zone.group(zpnt,"Construction")
+        if string.find(z_group,"Shell") # 0 then ;Group is Shell
+            z_dens(lst_ind) = 1987.    ;Set density for zero saturation
+            z_poro(lst_ind) = 0.4      ;Set porosity to be consistent with saturated unit weight
+            z_vs1(lst_ind) = 200       ;Set shear wave velocity at 1 atm
+            z_vsexp(lst_ind) = 0.25    ;Set exponent for shear wave velocity stress dependence (Vs = Vs1 * (Sigm'/Pa)^Exp   
+            z_gred(lst_ind) = 0.5     ;reduction in shear modulus (and therefore bulk modulus) for construction
+            z_pois(lst_ind) = 0.3      ;Set Poisson's ratio
+            z_coh(lst_ind) = 0.0    ;Set cohesion
+            z_fric(lst_ind) = 35.0     ;Set friction angle
+            z_dila(lst_ind) = 0.0      ;Set dilation angle
+            z_tens(lst_ind) = 0.0      ;Set tension limit
+            z_cond_xx(lst_ind) = 1.08E-6  ;Set xx conductivity in m/s
+            z_cond_yy(lst_ind) = z_cond_xx(lst_ind)/20.0   ;Set yy conductivity in m/s
+        endif
+        if string.find(z_group,"Core") # 0 then ;Group is Core
+            z_dens(lst_ind) = 1987.    ;Set density for zero saturation
+            z_poro(lst_ind) = 0.4      ;Set porosity to be consistent with saturated unit weight
+            z_vs1(lst_ind) = 200       ;Set shear wave velocity at 1 atm
+            z_vsexp(lst_ind) = 0.25    ;Set exponent for shear wave velocity stress dependence (Vs = Vs1 * (Sigm'/Pa)^Exp   
+            z_gred(lst_ind) = 0.5     ;reduction in shear modulus (and therefore bulk modulus) for construction
+            z_pois(lst_ind) = 0.3      ;Set Poisson's ratio
+            z_coh(lst_ind) = 0.0    ;Set cohesion
+            z_fric(lst_ind) = 35.0     ;Set friction angle
+            z_dila(lst_ind) = 0.0      ;Set dilation angle
+            z_tens(lst_ind) = 0.0      ;Set tension limit
+            z_cond_xx(lst_ind) = 1.08E-7  ;Set xx conductivity in m/s
+            z_cond_yy(lst_ind) = z_cond_xx(lst_ind)/5.0   ;Set yy conductivity in m/s
+        endif
+        if string.find(z_group,"Rolled_Fill") # 0 then ;Group is Rolled Fill
+            z_dens(lst_ind) = 2089.    ;Set density for zero saturation
+            z_poro(lst_ind) = 0.3      ;Set porosity to be consistent with saturated unit weight
+            z_vs1(lst_ind) = 230       ;Set shear wave velocity at 1 atm
+            z_vsexp(lst_ind) = 0.25    ;Set exponent for shear wave velocity stress dependence (Vs = Vs1 * (Sigm'/Pa)^Exp   
+            z_gred(lst_ind) = 0.5     ;reduction in shear modulus (and therefore bulk modulus) for construction
+            z_pois(lst_ind) = 0.3      ;Set Poisson's ratio
+            z_coh(lst_ind) = 0.0    ;Set cohesion
+            z_fric(lst_ind) = 35.0     ;Set friction angle
+            z_dila(lst_ind) = 0.0      ;Set dilation angle
+            z_tens(lst_ind) = 0.0      ;Set tension limit
+            z_cond_xx(lst_ind) = 5.0E-7  ;Set xx conductivity in m/s
+            z_cond_yy(lst_ind) = z_cond_xx(lst_ind)/5.0   ;Set yy conductivity in m/s
+        endif
+        if string.find(z_group,"Ground_Shale") # 0 then ;Group is Ground Shale
+             z_dens(lst_ind) = 2089.    ;Set density for zero saturation
+            z_poro(lst_ind) = 0.3      ;Set porosity to be consistent with saturated unit weight
+            z_vs1(lst_ind) = 230       ;Set shear wave velocity at 1 atm
+            z_vsexp(lst_ind) = 0.25    ;Set exponent for shear wave velocity stress dependence (Vs = Vs1 * (Sigm'/Pa)^Exp   
+            z_gred(lst_ind) = 0.5     ;reduction in shear modulus (and therefore bulk modulus) for construction
+            z_pois(lst_ind) = 0.3      ;Set Poisson's ratio
+            z_coh(lst_ind) = 0.0    ;Set cohesion
+            z_fric(lst_ind) = 35.0     ;Set friction angle
+            z_dila(lst_ind) = 0.0      ;Set dilation angle
+            z_tens(lst_ind) = 0.0      ;Set tension limit
+            z_cond_xx(lst_ind) = 5.0E-8  ;Set xx conductivity in m/s
+            z_cond_yy(lst_ind) = z_cond_xx(lst_ind)/5.0   ;Set yy conductivity in m/s
+        endif
+        if string.find(z_group,"Upper_Alluvium") # 0 then ;Group is Upper Alluvium
+            z_dens(lst_ind) = 2140.    ;Set density for zero saturation
+            z_poro(lst_ind) = 0.4      ;Set porosity to be consistent with saturated unit weight
+            z_vs1(lst_ind) = 300       ;Set shear wave velocity at 1 atm
+            z_vsexp(lst_ind) = 0.25    ;Set exponent for shear wave velocity stress dependence (Vs = Vs1 * (Sigm'/Pa)^Exp   
+            z_gred(lst_ind) = 0.5     ;reduction in shear modulus (and therefore bulk modulus) for construction
+            z_pois(lst_ind) = 0.3      ;Set Poisson's ratio
+            z_coh(lst_ind) = 0.0    ;Set cohesion
+            z_fric(lst_ind) = 37.0     ;Set friction angle slightly lower to limit softening when changing models
+            z_dila(lst_ind) = 0.0      ;Set dilation angle
+            z_tens(lst_ind) = 0.0      ;Set tension limit
+            z_cond_xx(lst_ind) = 5.0E-7  ;Set xx conductivity in m/s
+            z_cond_yy(lst_ind) = z_cond_xx(lst_ind)/10.0   ;Set yy conductivity in m/s
+        endif
+        if string.find(z_group,"Alluvium") # 0 then ;Group is Alluvium
+            z_dens(lst_ind) = 2140.    ;Set density for zero saturation
+            z_poro(lst_ind) = 0.4      ;Set porosity to be consistent with saturated unit weight
+            z_vs1(lst_ind) = 300       ;Set shear wave velocity at 1 atm
+            z_vsexp(lst_ind) = 0.25    ;Set exponent for shear wave velocity stress dependence (Vs = Vs1 * (Sigm'/Pa)^Exp   
+            z_gred(lst_ind) = 0.5     ;reduction in shear modulus (and therefore bulk modulus) for construction
+            z_pois(lst_ind) = 0.3      ;Set Poisson's ratio
+            z_coh(lst_ind) = 0.0    ;Set cohesion
+            z_fric(lst_ind) = 37.0     ;Set friction angle slightly lower to limit softening when changing models
+            z_dila(lst_ind) = 0.0      ;Set dilation angle
+            z_tens(lst_ind) = 0.0      ;Set tension limit
+            z_cond_xx(lst_ind) = 5.0E-7  ;Set xx conductivity in m/s
+            z_cond_yy(lst_ind) = z_cond_xx(lst_ind)/10.0   ;Set yy conductivity in m/s
+        endif
+        if string.find(z_group,"Dike") # 0 then ;Group is starter dikes
+            z_dens(lst_ind) = 2140.    ;Set density for zero saturation
+            z_poro(lst_ind) = 0.3      ;Set porosity to be consistent with saturated unit weight
+            z_vs1(lst_ind) = 230       ;Set shear wave velocity at 1 atm
+            z_vsexp(lst_ind) = 0.25    ;Set exponent for shear wave velocity stress dependence (Vs = Vs1 * (Sigm'/Pa)^Exp   
+            z_gred(lst_ind) = 0.5     ;reduction in shear modulus (and therefore bulk modulus) for construction
+            z_pois(lst_ind) = 0.3      ;Set Poisson's ratio
+            z_coh(lst_ind) = 0.0    ;Set cohesion
+            z_fric(lst_ind) = 37.0     ;Set friction angle
+            z_dila(lst_ind) = 0.0      ;Set dilation angle
+            z_tens(lst_ind) = 0.0      ;Set tension limit
+            z_cond_xx(lst_ind) = 5.0E-5  ;Set xx conductivity in m/s
+            z_cond_yy(lst_ind) = z_cond_xx(lst_ind)/1.0   ;Set yy conductivity in m/s
+        endif
+        if string.find(z_group,"Berm") # 0 then ;Group is Berm
+            z_dens(lst_ind) = 2140.    ;Set density for zero saturation
+            z_poro(lst_ind) = 0.3      ;Set porosity to be consistent with saturated unit weight
+            z_vs1(lst_ind) = 230       ;Set shear wave velocity at 1 atm
+            z_vsexp(lst_ind) = 0.25    ;Set exponent for shear wave velocity stress dependence (Vs = Vs1 * (Sigm'/Pa)^Exp   
+            z_gred(lst_ind) = 0.5     ;reduction in shear modulus (and therefore bulk modulus) for construction
+            z_pois(lst_ind) = 0.3      ;Set Poisson's ratio
+            z_coh(lst_ind) = 0.0    ;Set cohesion
+            z_fric(lst_ind) = 40.0     ;Set friction angle
+            z_dila(lst_ind) = 0.0      ;Set dilation angle
+            z_tens(lst_ind) = 0.0      ;Set tension limit
+            z_cond_xx(lst_ind) = 5.0E-5  ;Set xx conductivity in m/s
+            z_cond_yy(lst_ind) = z_cond_xx(lst_ind)/1.0   ;Set yy conductivity in m/s
+        endif
+    endloop
+end
+[DefineProps]   ;call FISH function

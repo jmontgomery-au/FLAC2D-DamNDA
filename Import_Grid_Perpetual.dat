@@ -1,0 +1,32 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  File to create geometry for the perpetual version of FLAC2D (9.0)
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;Model Setup
+; This model will require dynamic, fluid-mechanical coupling, and user-defined models
+model configure dynamic 
+model configure fluid 
+model configure plugins
+; Fluid calculations currently require this to be off
+zone nodal-mixed-discretization off
+;
+;Initialization will be performed for static conditions and mechanical only
+model fluid active off
+model dyn active off
+model mech active on
+; Use small strain for initialization
+model large-strain off
+; Set gravity to value in SetConstants
+model gravity [_grav] ; m/s^2
+; Import grid file with names for groups and faces
+zone import 'USF_Geom.f2grid' use-given-ids
+model save 'USF_Geom_Perpetual'

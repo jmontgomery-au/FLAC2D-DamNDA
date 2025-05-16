@@ -1,0 +1,93 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+; Set history names and locations for dynamic portion of the analyses
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised February 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+
+zone history name 'crest_dy' displacement-y position (-11,350.99)
+zone history name 'crest_dx' displacement-x position (-11,350.99)
+zone history name 'DSedge_dy' displacement-y position (32,365.99)
+zone history name 'DSedge_dx' displacement-x position (32,365.99)
+zone history name 'berm_dy' displacement-y position (60.74,356.29)
+zone history name 'berm_dx' displacement-x position (60.74,356.29)
+zone history name 'USShell_dy' displacement-y position (-49.74,358.5)
+zone history name 'USShell_dx' displacement-x position (-49.74,358.5)
+;
+zone history name 'crest_ay' acceleration-y position (-11,350.99)
+zone history name 'crest_ax' acceleration-x position (-11,350.99)
+zone history name 'core_ay' acceleration-y position (-11,366)
+zone history name 'core_ax' acceleration-x position (-11,366)
+zone history name 'ToR_ay' acceleration-y position (-11,335)
+zone history name 'ToR_ax' acceleration-x position (-11,335)
+zone history name 'base_ay' acceleration-y position (-11,310)
+zone history name 'base_ax' acceleration-x position (-11,310)
+;
+zone history name 'pp1' pore-pressure position (-50,351.6) source zone
+zone history name 'pp2' pore-pressure position (-25,351.6) source zone
+zone history name 'pp3' pore-pressure position (25,351.6) source zone
+zone history name 'pp4' pore-pressure position (50,351.6) source zone
+zone history name 'pp5' pore-pressure position (-25,357) source zone
+zone history name 'pp6' pore-pressure position (0,357) source zone
+zone history name 'pp7' pore-pressure position (25,357) source zone
+zone history name 'pp8' pore-pressure position (-50,357) source zone
+;
+;
+zone history name 'esyy1' stress-effective quantity yy position (-50,351.6)
+zone history name 'esyy2' stress-effective quantity yy position (-25,351.6)
+zone history name 'esyy3' stress-effective quantity yy position (25,351.6)
+zone history name 'esyy4' stress-effective quantity yy position (50,351.6)
+zone history name 'esyy5' stress-effective quantity yy position (-25,357)
+zone history name 'esyy6' stress-effective quantity yy position (0,357)
+zone history name 'esyy7' stress-effective quantity yy position (25,357)
+zone history name 'esyy8' stress-effective quantity yy position (-50,357)
+;
+;
+zone history name 'esxx1' stress-effective quantity xx position (-50,351.6)
+zone history name 'esxx2' stress-effective quantity xx position (-25,351.6)
+zone history name 'esxx3' stress-effective quantity xx position (25,351.6)
+zone history name 'esxx4' stress-effective quantity xx position (50,351.6)
+zone history name 'esxx5' stress-effective quantity xx position (-25,357)
+zone history name 'esxx6' stress-effective quantity xx position (0,357)
+zone history name 'esxx7' stress-effective quantity xx position (25,357)
+zone history name 'esxx8' stress-effective quantity xx position (-50,357)
+;
+zone history name 'sxy1' stress-effective quantity xy position (-50,351.6)
+zone history name 'sxy2' stress-effective quantity xy position (-25,351.6)
+zone history name 'sxy3' stress-effective quantity xy position (25,351.6)
+zone history name 'sxy4' stress-effective quantity xy position (50,351.6)
+zone history name 'sxy5' stress-effective quantity xy position (-25,357)
+zone history name 'sxy6' stress-effective quantity xy position (0,357)
+zone history name 'sxy7' stress-effective quantity xy position (25,357)
+zone history name 'sxy8' stress-effective quantity xy position (-50,357)
+;
+zone history name 'ru1' extra index 5 position (-50,351.6) source zone
+zone history name 'ru2' extra index 5 position (-25,351.6) source zone
+zone history name 'ru3' extra index 5 position (25,351.6) source zone
+zone history name 'ru4' extra index 5 position (50,351.6) source zone
+zone history name 'ru5' extra index 5 position (-25,357) source zone
+zone history name 'ru6' extra index 5 position (0,357) source zone
+zone history name 'ru7' extra index 5 position (25,357) source zone
+zone history name 'ru8' extra index 5 position (-50,357) source zone
+;
+zone history name 'ss1' extra index 7 position (-50,351.6) source zone
+zone history name 'ss2' extra index 7 position (-25,351.6) source zone
+zone history name 'ss3' extra index 7 position (25,351.6) source zone
+zone history name 'ss4' extra index 7 position (50,351.6) source zone
+zone history name 'ss5' extra index 7 position (-25,357) source zone
+zone history name 'ss6' extra index 7 position (0,357) source zone
+zone history name 'ss7' extra index 7 position (25,357) source zone
+zone history name 'ss8' extra index 7 position (-50,357) source zone
+;
+model history name 'dytime' dynamic time-total
