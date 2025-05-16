@@ -1,0 +1,60 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 7: Convert to dynamic models
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+model restore '6_RaiseRes'
+; Call file with functions used in dynamic analyses
+program call 'Dynamic_Functions.dat'
+program call 'Dynamic_Properties.dat'
+; Turn off console messages to speed computation
+program echo off
+; Call functions to assign PM4 and add extra cohesion to elements with low effective stress
+[set_PM4Zone(::zone.list)]
+[set_SurfaceCoh]
+; Solve for initial equilibrium with new models
+model solve
+;
+; Store stresses for end of setup phase. These will be treated as intial values for the calculations of ru and residual strength
+[store_stresses]
+;
+;Function to adjust the fluid tensile limit for the dynamic phase. This is necessary to prevent zones from desaturating during cycles of dilation.
+; Different functions are required for the two versions of FLAC2D
+def _AdjustFluidTensDyn
+        if version.code.major = 900 then ; Using perpetual version
+        command
+            ;Set fluid properties with desired tensile capacity of water
+            zone gridpoint ini fluid-tension [-1.0*_patm]
+        endcommand
+    else
+        command
+			; Ensure that pore pressure will build due to volumetric coupling 
+            zone fluid property pore-pressure-generation on
+            ;Set fluid properties with desired tensile capacity of water
+            zone fluid prop effective-cutoff [-1.0*_patm] range extra 4 1.0 1E12
+        endcommand
+    endif
+end
+[_AdjustFluidTensDyn]
+;
+;Configure model for shaking
+model dynamic active on
+model large-strain on
+;Setting Rayleigh Damping to be higher to damp out motions
+zone dynamic damping rayleigh 0.05 3.0
+model solve
+;Setting Rayleigh Damping back to recommended values
+zone dynamic damping rayleigh 0.005 3.0
+model save '7_DynSetup'

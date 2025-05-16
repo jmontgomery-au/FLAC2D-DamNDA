@@ -1,0 +1,126 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 4: Build embankment portion of dam in lifts based on groups
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+model restore '3_IniWT' ; Restore previously saved state
+zone gridpoint ini displacement 0 0 ;set displacement to zero in x and y direction from previously restored model
+;
+; Fuction to build dam in lifts based on the number of groups
+; Each group name should be numbered with the lowest value corresponding to first lift
+fish define BuildDam
+    loop local i (1,5) ; Loop through lifts
+        ; 
+        ; Set group names for current lift using loop counter
+        global _USShell = string.build("US_Shell_%1",i) 
+        global _Core = string.build("Core_%1",i)
+        global _DSShell = string.build("DS_Shell_%1",i)
+        global _USDike = string.build("US_Dike_%1",i)
+        global _DSDike = string.build("DS_Dike_%1",i)
+        command
+            ; Set Mohr-Coulomb model for groups in next lift
+            zone cmodel mohr-coulomb range group [_USShell]
+            zone cmodel mohr-coulomb range group [_Core]
+            zone cmodel mohr-coulomb range group [_DSShell]
+            zone cmodel mohr-coulomb range group [_DSDike]
+            zone cmodel mohr-coulomb range group [_USDike]
+            ;
+            ;Set Mohr-Coulomb and fluid properties for all newly created zones
+            [SetMCProps]
+            [SetFluidProps]
+            ;Start with dry dam
+            zone gridpoint ini saturation 0.0 range group [_USShell] or [_Core] or [_DSShell] or [_USDike] or [_DSDike]
+            ;Initialize total stress conditions in new zones
+            zone initialize-stress ratio 0.5 range group [_USShell] or [_Core] or [_DSShell] or [_USDike] or [_DSDike]
+            ;Solve for mechanical equilibrium
+            model mech active on
+            model fluid active off
+            ;Fully drained analysis
+            [SetFluidModulus(0.0)]
+            ;Set stress-dependent stiffness
+            [SetZoneStiffness]
+            ;Solve for equilibrium
+            model solve ratio 1E-5
+            ;
+            [set_ko(0.4,2.0)]   ;Adjust Ko to limits
+            [SetZoneStiffness]  ;Set stress-dependent stiffness
+            model solve ratio 1E-5 ;Solve for equilibrium
+            [plot_ko_alpha]   ;Store Ko and alpha
+        endcommand
+    endloop
+    ; Build final lift using same procedure
+	command
+        zone cmodel mohr-coulomb range group 'Ground_Shale'
+        zone cmodel mohr-coulomb range group 'Rolled_Fill_Trench'
+        [SetMCProps]
+        [SetFluidProps]
+        ;Fluid
+        zone gridpoint ini saturation 0.0 range group 'Ground_Shale'
+        zone gridpoint ini saturation 0.0 range group 'Rolled_Fill_Trench'
+        [SetMCProps]
+        ;Initialize total stress conditions in new zones
+        zone initialize-stress ratio 0.5 range group 'Ground_Shale'
+         zone initialize-stress ratio 0.5 range group 'Rolled_Fill_Trench'
+        [SetMCProps]
+        ;Solve for mechanical equilibrium
+		model mech active on
+		model fluid active off
+		;Fully drained analysis
+		[SetFluidModulus(0.0)]
+		;Set stress-dependent stiffness
+		[SetZoneStiffness]
+		;Solve for equilibrium
+		model solve ratio 1E-5
+		;
+		[set_ko(0.4,2.0)]   ;Adjust Ko to limits
+		[SetZoneStiffness]  ;Set stress-dependent stiffness
+		model solve ratio 1E-5 ;Solve for equilibrium
+		[plot_ko_alpha]   ;Store Ko and alpha
+;        ;
+   endcommand
+   loop i (1,3) ; Loop through lifts of rolled fill
+        ; 
+        ; Set group names for current lift using loop counter
+        local _CurRF = string.build("Rolled_Fill_%1",i)
+        command
+            ; Set Mohr-Coulomb model for groups in next lift
+            zone cmodel mohr-coulomb range group [_CurRF]
+            ;
+            ;Set Mohr-Coulomb and fluid properties for all newly created zones
+            [SetMCProps]
+            [SetFluidProps]
+            ;Start with dry dam
+            zone gridpoint ini saturation 0.0 range group [_CurRF]
+            ;Initialize total stress conditions in new zones
+            zone initialize-stress ratio 0.5 range group [_CurRF]
+            ;Solve for mechanical equilibrium
+            model mech active on
+            model fluid active off
+            ;Fully drained analysis
+            [SetFluidModulus(0.0)]
+            ;Set stress-dependent stiffness
+            [SetZoneStiffness]
+            ;Solve for equilibrium
+            model solve ratio 1E-5
+            ;
+            [set_ko(0.4,2.0)]   ;Adjust Ko to limits
+            [SetZoneStiffness]  ;Set stress-dependent stiffness
+            model solve ratio 1E-5 ;Solve for equilibrium
+            [plot_ko_alpha]   ;Store Ko and alpha
+        endcommand
+    endloop
+end
+[BuildDam]
+model save '4_BuildDam'

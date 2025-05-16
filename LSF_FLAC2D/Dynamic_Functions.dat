@@ -1,0 +1,214 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;Collection of functions used primarily in the dynamic and post-shaking analyses
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+;
+;Function: store_stresses
+;Inputs: None
+;Purpose: Stores current esyy in extra variable 3 and pore pressure in extra variable 4 
+;
+;Loops through all zones and stores esyy (compression positive) and pore pressure for non-null zones. Values stored in extra variables for zones
+;Resets extra variables for ru, max ru, and shear strain
+fish define store_stresses
+    loop foreach local zpnt zone.list
+        if zone.model(zpnt) # 'null' then
+            local esyy = -1.0*zone.stress.effective.yy(zpnt) ;esyy = effective stress in y direction
+            local ini_pp = zone.pp(zpnt)
+            zone.extra(zpnt,3) = esyy
+            zone.extra(zpnt,4) = ini_pp
+            zone.extra(zpnt,5) = 0.0
+            zone.extra(zpnt,6) = 0.0
+            zone.extra(zpnt,7) = 0.0
+        endif
+    endloop
+end
+;
+;Function: $Assign_PM4Sand
+;Inputs: zone_id for assigning PM4Sand
+;Purpose: Changes model in zone to PM4Sand and assigns default properties
+;
+;id number for zone must be passed to function, not pointer. Use zone.id
+;Need to assign correct input parameter values to $Dr, $Go, and $hpo 
+fish define $Assign_PM4Sand(zone_id)
+   command
+        zone cmodel assign pm4sand2d range id [zone_id]
+        zone property D_r [$Dr] G_o [$Go] h_po [$hpo] range id [zone_id]
+    endcommand
+end
+;
+;Function: $Assign_PM4Silt
+;Inputs: zone_id for assigning PM4Silt
+;Purpose: Changes model in zone to PM4Silt and assigns default properties
+;
+;id number for zone must be passed to function, not pointer. Use zone.id
+;Need to assign correct input parameter values to $Surat, $Go, and $hpo 
+fish define $Assign_PM4Silt(zone_id)
+   command
+        zone cmodel assign pm4silt2d range id [zone_id]
+        zone property G_o [$Go] Su_Rat [$SuRat] h_po [$hpo] range id [zone_id]
+    endcommand
+end
+;
+; Function: $InitialOptParams
+; Inputs: None
+; Purpose: Sets all PM4Sand and PM4Silt optional parameters to zero
+; Setting these to zero ensures they take the default value if not assigned
+fish define $InitialOptParams
+	; Optional parameters for PM4Silt taken from the PM4Silt drivers
+	; developed by Katerina Ziotopoulou and Ross Boulanger (https://pm4silt.engr.ucdavis.edu/)
+	$eo           = 0.0  ; Defaults to 0.9
+	$Gexp		  = 0.0  ; Defaults to 0.75 if equal to 0
+	$ruMax        = 0.0  ; Default logic listed in manual
+	$nbwet        = 0.0  ; Default is 0.8.  Must be <=1.0 and >0.0. 
+	$nbdry        = 0.0  ; Defaults to 0.5
+	$nd           = 0.0  ; Defaults to 0.3
+	$Ado          = 0.0  ; Default is 0.8
+	$ho           = 0.0  ; Default is 0.5
+	$zmax         = 0.0  ; Default is 10 < 40SuRat < 20
+	$cz           = 0.0  ; Default is 100
+	$ce           = 0.0  ; Default varies from 0.5 to 1.1 for SuRat at 0.25 to 0.75
+	$CGdegrad     = 0.0  ; Default is 3
+	$phicv        = 0.0  ; Default is 32 degrees
+	$lamda        = 0.0  ; Default is 0.06
+	$Ckaf         = 0.0  ; Default is 4.0
+	$Su_factor_1  = 0.0  ; Default is 1.0 at initialization 
+	; Optional parameters for PM4Sand taken from the PM4Sand drivers
+	; developed by Katerina Ziotopoulou and Ross Boulanger (https://pm4sand.engr.ucdavis.edu/)
+	$ho     =  0.0     ; Defaults to value calculated as a function of Dr
+	$emin   =  0.0     ; Defaults to 0.5
+	$emax   =  0.0     ; Defaults to 0.8
+    $nb     =  0.0     ; Defaults to 0.5
+    $nd     =  0.0     ; Defaults to 0.1
+    $Ado    =  0.0     ; Defaults to value calculated to honor Bolton's relationship
+    $zmax   =  0.0     ; Defaults to value calculated as a function of the rel. state parameter
+    $cz     =  0.0     ; Defaults to 250
+    $ce     =  0.0     ; Defaults to value calculated as a function of Dr
+    $phicv  =  0.0     ; Defaults to 33 degrees
+    $pois   =  0.0     ; Defaults to 0.3
+    $Gdegr  =  0.0     ; Defaults to 2.0
+	$CDR    =  0.0     ; Defaults to value calculated as a function of Dr
+	$Ckaf   =  0.0     ; Defaults to value calculated as a function of Dr
+	$Q      =  0.0     ; Defaults to 10.0
+	$R      =  0.0     ; Defaults to 1.5
+	$m      =  0.0     ; Defaults to 0.01
+	$Fsed   =  0.0     ; Defaults to 0.04
+	$psedo  =  0.0     ; Defaults to -Patm/5
+end
+;
+;Function: $Assign_PM4Sand_Optional
+;Inputs: zone_id for assigning PM4Sand optional parameters
+;Purpose: Assign optional input parameters for PM4Sand
+; Values should be specifed for the parameters listed below or the 
+; values should be set to zero to get default values
+; This function matches the parameter names used in the PM4Silt drivers
+; developed by Katerina Ziotopoulou and Ross Boulanger (https://pm4sand.engr.ucdavis.edu/)
+fish define $Assign_PM4Sand_Optional(zone_id)
+	command
+		zone property ...
+		h_o     [$ho] ...
+		e_min   [$emin] ...
+		e_max   [$emax] ...
+		n_b     [$nb] ...
+		n_d     [$nd] ...
+		A_do    [$Ado] ...
+		z_max   [$zmax] ...
+		c_z     [$cz] ...
+		c_e     [$ce] ...
+		phi_cv  [$phicv] ...
+		pois    [$pois] ...
+		G_degr  [$Gdegr] ...
+		C_DR    [$CDR] ...
+		C_kaf   [$Ckaf] ...
+		Q_bolt  [$Q] ...
+		R_bolt  [$R] ...
+		m_par   [$m] ...
+		F_sed   [$Fsed] ...
+		p_sedo  [$psedo] ...
+		range id [zone_id]
+	endcommand
+end
+;
+;Function: $Assign_PM4Silt_Optional
+;Inputs: zone_id for assigning PM4Silt optional parameters
+;Purpose: Assign optional input parameters for PM4Silt
+; Values should be specifed for the parameters listed below or the 
+; values should be set to zero to get default values
+; This function matches the parameter names used in the PM4Silt drivers
+; developed by Katerina Ziotopoulou and Ross Boulanger (https://pm4silt.engr.ucdavis.edu/)
+fish define $Assign_PM4Silt_Optional(zone_id)
+   command
+        zone property ...
+		e_o   	[$eo] ...
+		G_exp	[$Gexp] ...
+		ru_max 	[$ruMax] ...
+		n_bwet	[$nbwet] ...
+		n_bdry	[$nbdry] ...
+		n_d		[$nd] ...
+		h_o     [$ho] ...
+		z_max   [$zmax] ...
+		c_z     [$cz] ...
+		c_e     [$ce] ...
+		G_degr  [$CGdegrad] ...
+		A_do    [$Ado] ...
+		phi_cv  [$phicv] ...
+		lamda	[$lamda] ...
+		Ckaf    [$Ckaf] ...
+		Su_factor [$Su_factor_1] ...
+		range id [zone_id]
+    endcommand
+end
+
+;
+;Operator Function: set_SurfaceCoh
+;Inputs: zone pointer
+;Purpose: Increases cohesion in PM4Sand elements with low effective stress conditions
+;
+;Operator function, so should be called using [set_SurfaceCoh(::zone.list)]
+; Checks to see if zone has a stress less than 25 kPa and if so increases the cohesion
+fish define set_SurfaceCoh
+    lst_ind = 0 ;reset list index
+    loop foreach local zpnt zone.list
+        if zone.model(zpnt) = 'pm4sand2d' or zone.model(zpnt) = 'pm4silt2D' then
+            local esyy = -1.0*zone.stress.effective.yy(zpnt)
+            if esyy < 25000 then
+                local z_id = zone.id(zpnt)
+                command
+                    zone cmodel mohr-coulomb range id [z_id]
+                endcommand
+                zone.prop(zpnt,'cohesion') = 10000  ;Set cohesion
+                zone.prop(zpnt,'friction') = 0.0     ;Set friction angle
+                zone.prop(zpnt,'dilation') = 0.0      ;Set dilation angle
+                zone.prop(zpnt,'tension') = 0.0     ;Set tension limit
+                SetZoneStiffness
+            endif
+        endif
+    endloop
+end
+;
+;Operator Function: StoreRu
+;Inputs: zone pointer
+;Purpose: updates extra variables to calculate and store ru, max ru and shear strain
+;
+; Operator function meant to be run during cycling, so should be set with fishcall
+; fish callback add [StoreRu(::zone.list)] -100
+ fish operator StoreRu(zpnt)
+    if zone.model(zpnt) # 'null' then
+        local esyy = -1.0*zone.stress.effective.yy(zpnt) ;esyy = effective stress in y direction
+        zone.extra(zpnt,5) = 1.0 - esyy/zone.extra(zpnt,3) ; ru = 1 - sigv'/sigvo'
+        zone.extra(zpnt,6) = math.max(zone.extra(zpnt,5),zone.extra(zpnt,6)) ; Store maximum ru
+        zone.extra(zpnt,7) = 2.0 * zone.strain.shear.inc(zpnt) ; Compute and store engineering shear strain
+    endif
+end

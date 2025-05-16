@@ -1,0 +1,118 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;   Construct Free-Field with PM4Sand/PM4Silt models in FLAC2D
+;   -----------------------------------------------------------------------------------------------
+;   - Purpose: FLAC2D's free-field command does not automatically transfer PM4soil properties to
+;     the free-field elements. This function performs that task.
+;   - Place this file in the same directory/folder as your other project files
+;   - Instead of using the command, "zone dynamic free-field", insert the following two lines in
+;     your project file. The first line calls (reads) this file and the 2nd line executes it.
+;           progam call "Free_Field_w_PM4Soils.f2dat"
+;           [$construct_FF_w_PM4Soils"]
+;
+;   -----------------------------------------------------------------------------------------------
+;   Ross W Boulanger - 2024
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+;   Generate the free-field boundary. FLAC2D will insert the PM4 model but not with its properties
+;
+zone dynamic free-field on
+
+;   -----------------------------------------------------------------------------------------------
+;   Function that puts PM4 properties in the free-field given pointers
+;
+fish define $put_PMSoil(($zFFPtr,$zColPtr)
+
+    if zone.model($zColPtr) = "pm4sand2d"
+        zone.prop($zFFPtr,"P_atm")  = zone.prop($zColPtr,"P_atm")
+        ;
+        zone.prop($zFFPtr,"D_r")  = zone.prop($zColPtr,"D_r")
+        zone.prop($zFFPtr,"G_o")  = zone.prop($zColPtr,"G_o")
+        zone.prop($zFFPtr,"h_po") = zone.prop($zColPtr,"h_po")
+        ;
+        zone.prop($zFFPtr,"h_o") = zone.prop($zColPtr,"h_o")
+        zone.prop($zFFPtr,"e_min") = zone.prop($zColPtr,"e_min")
+        zone.prop($zFFPtr,"e_max") = zone.prop($zColPtr,"e_max")
+        zone.prop($zFFPtr,"n_b") = zone.prop($zColPtr,"n_b")
+        zone.prop($zFFPtr,"n_d") = zone.prop($zColPtr,"n_d")
+        zone.prop($zFFPtr,"A_do") = zone.prop($zColPtr,"A_do")
+        zone.prop($zFFPtr,"z_max") = zone.prop($zColPtr,"z_max")
+        zone.prop($zFFPtr,"c_z") = zone.prop($zColPtr,"c_z")
+        zone.prop($zFFPtr,"c_e") = zone.prop($zColPtr,"c_e")
+        zone.prop($zFFPtr,"phi_cv") = zone.prop($zColPtr,"phi_cv")
+        zone.prop($zFFPtr,"pois") = zone.prop($zColPtr,"pois")
+        zone.prop($zFFPtr,"G_degr") = zone.prop($zColPtr,"G_degr")
+        zone.prop($zFFPtr,"C_DR") = zone.prop($zColPtr,"C_DR")
+        zone.prop($zFFPtr,"C_kaf") = zone.prop($zColPtr,"C_kaf")
+        zone.prop($zFFPtr,"Q_bolt") = zone.prop($zColPtr,"Q_bolt")
+        zone.prop($zFFPtr,"R_bolt") = zone.prop($zColPtr,"R_bolt")
+        zone.prop($zFFPtr,"m_par") = zone.prop($zColPtr,"m_par")
+        zone.prop($zFFPtr,"F_sed") = zone.prop($zColPtr,"F_sed")
+        zone.prop($zFFPtr,"p_sedo") = zone.prop($zColPtr,"p_sedo")
+    end_if
+
+    if zone.model($zColPtr) = "pm4silt2D"
+        zone.prop($zFFPtr,"P_atm")  = zone.prop($zColPtr,"P_atm")
+        ;
+        zone.prop($zFFPtr,"G_o")  = zone.prop($zColPtr,"G_o")
+        zone.prop($zFFPtr,"Su_Rat")  = zone.prop($zColPtr,"Su_Rat")
+        zone.prop($zFFPtr,"S_u")  = zone.prop($zColPtr,"S_u")
+        zone.prop($zFFPtr,"h_po")  = zone.prop($zColPtr,"h_po")
+        ;
+        zone.prop($zFFPtr,"e_o")  = zone.prop($zColPtr,"e_o")
+        zone.prop($zFFPtr,"G_exp")  = zone.prop($zColPtr,"G_exp")
+        zone.prop($zFFPtr,"pois")  = zone.prop($zColPtr,"pois")
+        zone.prop($zFFPtr,"ru_max")  = zone.prop($zColPtr,"ru_max")
+        zone.prop($zFFPtr,"n_bwet")  = zone.prop($zColPtr,"n_bwet")
+        zone.prop($zFFPtr,"n_bdry")  = zone.prop($zColPtr,"n_bdry")
+        zone.prop($zFFPtr,"n_d")  = zone.prop($zColPtr,"n_d")
+        zone.prop($zFFPtr,"h_o")  = zone.prop($zColPtr,"h_o")
+        zone.prop($zFFPtr,"z_max")  = zone.prop($zColPtr,"z_max")
+        zone.prop($zFFPtr,"c_z")  = zone.prop($zColPtr,"c_z")
+        zone.prop($zFFPtr,"c_e")  = zone.prop($zColPtr,"c_e")
+        zone.prop($zFFPtr,"G_degr")  = zone.prop($zColPtr,"G_degr")
+        zone.prop($zFFPtr,"A_do")  = zone.prop($zColPtr,"A_do")
+        zone.prop($zFFPtr,"phi_cv")  = zone.prop($zColPtr,"phi_cv")
+        zone.prop($zFFPtr,"lamda")  = zone.prop($zColPtr,"lamda")
+        zone.prop($zFFPtr,"Ckaf")  = zone.prop($zColPtr,"Ckaf")
+        zone.prop($zFFPtr,"CG_consol")  = zone.prop($zColPtr,"CG_consol")
+        zone.prop($zFFPtr,"Su_factor")  = zone.prop($zColPtr,"Su_factor")
+    end_if
+
+end
+
+;   -----------------------------------------------------------------------------------------------
+;   Function that locates the free-field zones and their masters on the model edges
+;
+fish define $construct_FF_w_PM4Soils
+
+    $xLeftCol    = 1e10
+    $xLeftFF     = 1e10
+    $xRightCol   = -1e10
+    $xRightFF    = -1e10
+    loop foreach $zPtr zone.list()
+        if zone.group($zPtr) != "FreeField"
+            $xLeftCol  = math.min($xLeftCol,zone.pos.x($zPtr))
+            $xRightCol = math.max($xRightCol,zone.pos.x($zPtr))
+        else
+            $xLeftFF  = math.min($xLeftFF, zone.pos.x($zPtr))
+            $xRightFF = math.max($xRightFF,zone.pos.x($zPtr))
+        end_if
+    end_loop
+    $xMidMesh = ($xLeftCol + $xRightCol)/2
+
+    local inFFgroup = zone.isgroup(::zone.list,"FreeField")
+    
+    loop foreach $zFFPtr zone.list(inFFgroup)
+        $y_FF_centroid  = zone.pos.y($zFFPtr)
+        $x_FF_centroid  = zone.pos.x($zFFPtr)
+        if $x_FF_centroid < $xMidMesh
+            $zColPtr  = zone.near($xLeftCol,$y_FF_centroid)
+        else
+            $zColPtr  = zone.near($xRightCol,$y_FF_centroid)
+        end_if
+        $put_PMsoil($zFFPtr,$zColPtr)
+    end_loop
+    
+end

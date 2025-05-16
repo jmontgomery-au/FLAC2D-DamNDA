@@ -1,0 +1,135 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;Store soil properties for dynamic analysis and assign to zones by group
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+;
+; Function to assign PM4Sand or PM4Silt to each zone based on group name
+; For each group name, set either UsePM4Sand or UsePM4Silt equal to 1 (these functions are defined in Dynamic_Functions.dat)
+; PM4Sand needs $N160 and $hpo
+; If optional parameters are set, user must specify 
+fish define set_PM4Zone(zpnt)
+    if zone.model(zpnt) # 'null' then
+        local z_group = zone.group(zpnt,"Default") ; Read group name from 'Construction' slot
+        local z_id = zone.id(zpnt) ; Store Zone ID
+		; Initialize all variables
+        local UsePM4Sand = 0
+        local UsePM4Silt = 0
+        local UseOptParam = 0
+		$InitialOptParams
+		;
+        if z_group="US_Shell_1" then ;Group is Shell
+            $N160 = 14.5
+            $hpo    = 0.34		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if z_group="US_Shell_2" then ;Group is Shell
+            $N160 = 30.0
+            $hpo    = 1.99		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if z_group="US_Shell_3" then ;Group is Shell
+            $N160 = 24.8
+            $hpo    = 0.46		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if z_group="US_Shell_4" then ;Group is Shell
+            $N160 = 14.4
+            $hpo    = 0.34		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if z_group="US_Shell_5" then ;Group is Shell
+            $N160 = 19.3
+            $hpo    = 0.33		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+         if z_group="DS_Shell_1" then ;Group is Shell
+            $N160 = 15.6
+            $hpo    = 0.34		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if z_group="DS_Shell_2" then ;Group is Shell
+            $N160 = 30.0
+            $hpo    = 1.99		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if z_group="DS_Shell_3" then ;Group is Shell
+            $N160 = 26.2
+            $hpo    = 0.59		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if z_group="DS_Shell_4" then ;Group is Shell
+            $N160 = 15.4
+            $hpo    = 0.34		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if z_group="DS_Shell_5" then ;Group is Shell
+            $N160 = 20.6
+            $hpo    = 0.33		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if string.find(z_group,"Alluvium") # 0 then ;Group is Alluvium 
+            $N160 = 25.0
+            $hpo    = 0.47		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if string.find(z_group,"Berm") # 0 then ;Group is Berm
+            $N160 = 30.0
+            $hpo    = 1.99		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if string.find(z_group,"Core") # 0 then ;Group is Core
+            $Surat = 0.153
+            $Go = 370
+            $hpo    = 6		; Contraction rate parameter
+            $nbwet        = 0.21
+            $ho           = 1.1
+            $eo           = 0.9
+            UsePM4Silt = 1
+            UseOptParam = 1
+        endif
+        if string.find(z_group,"Rolled_Fill") # 0 then ;Group is Core
+            $Surat = 0.5
+            $Go = 660
+            $hpo    = 50		; Contraction rate parameter
+            UsePM4Silt = 1
+        endif
+        if string.find(z_group,"Ground_Shale") # 0 then ;Group is Core
+            $Surat = 0.5
+            $Go = 660
+            $hpo    = 50		; Contraction rate parameter
+            UsePM4Silt = 1
+        endif
+        if string.find(z_group,"Dike") # 0 then ;Group is Core
+            $N160 = 25.0
+            $hpo    = 0.47		; Contraction rate parameter
+            UsePM4Sand = 1
+        endif
+        if UsePM4Sand = 1 then
+            $Dr 	= math.sqrt($N160/46.0)		; Field: Estimate from SPT or CPT data
+            $Go    	= 167.*math.sqrt($N160+2.5)		; Field: Calibrate to Vs data
+            $Assign_PM4Sand(z_id) ; Assign PM4Sand and properties to current zone
+			if UseOptParam = 1 then
+                $Assign_PM4Sand_Optional(z_id)
+            endif
+        endif
+        if UsePM4Silt = 1 then
+            $Assign_PM4Silt(z_id) ; Assign PM4Sand and properties to current zone
+            if UseOptParam = 1 then
+                $Assign_PM4Silt_Optional(z_id)
+            endif
+        endif
+    endif
+end

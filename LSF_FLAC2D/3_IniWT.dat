@@ -1,0 +1,82 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 3: Initialize water table in foundation
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+model restore '2_BuildAlluvium' ; Restore previously saved state
+;-----------------------------------------------------------------------------------------------------------------------------------------------------
+;
+;
+;Function: set_ini_wt
+;Inputs:    hL should be the total head at the x coordinate corresponding to x_start
+;           hR should be the total head at the x coordinate x_end
+;           x_start is the x coordinate for the hL boundary
+;           x_end is the x coordinate for the hR boundary
+;           y_base is the elevation along the base of the model
+;           gamma_w is unit weight of water
+;Purpose: Sets gridpoint pore pressure based on a linear gradient between x_start and x_end
+;
+; Calculates pore pressure on edges of the model at the base and then initializes all gridpoint pore pressures based on gradients
+; Fixes gridpoint pore pressure along edges of model to represent constant head boundaries
+fish define set_ini_wt(hL,hR,x_start,x_end,y_base,gamma_w)
+        
+    global pp_xL = (hL - y_base)*gamma_w ;Calculate pore pressure using total head and elevation head at base of model at x = x_start
+    global pp_xR = (hR - y_base)*gamma_w ;Calculate pore pressure using total head and elevation head at base of model at x = x_end
+    global pp_xGrad = (pp_xL - pp_xR)/((x_start+0.1) - (x_end - 0.1)) ; Use a linear gradient to initialize pore pressure between x_start and x_end
+    
+    command
+        ; Initialize gridpoint pore pressure at all gridpoints between x_start and x_end assuming constant head in y-direction and linear gradient in x-direction
+        zone gridpoint initialize p-p [pp_xL] gradient [1.0*pp_xGrad] [-1.0*gamma_w] origin ([x_start+0.1],[y_base]) range pos-x [x_start+0.1] [x_end-0.1] pos-y [y_base] [hL]
+        ; Initialize gridpoint pore pressure at all gridpoints along edges of the model assuming constant head boundary
+        zone gridpoint ini p-p [pp_xL] gradient 0. [-1.0*gamma_w] origin ([x_start],[y_base]) range pos-x [x_start-0.1] [x_start+0.1] pos-y [y_base] [hL]
+        zone gridpoint ini p-p [pp_xR] gradient 0. [-1.0*gamma_w] origin ([x_end],[y_base]) range pos-x [x_end-0.1] [x_end+0.1] pos-y [y_base] [hR]
+        ; Fix gridpoint pore pressure at all gridpoints along edges of the model
+        zone gridpoint fix p-p range pos-x [x_start-0.1] [x_start+0.1] pos-y [y_base] [hL]
+        zone gridpoint fix p-p range pos-x [x_end-0.1] [x_end+0.1] pos-y [y_base] [hR]
+    endcommand
+    ;
+end
+
+;Set initial pore pressures using function and model geometry    
+[set_ini_wt(306.0,303.9,-220.0,280.0,275.0,_waterUW)]
+;
+;Only solve for fluid equilibrium
+model mech active off
+model fluid active on
+;
+[SetFluidModulus(1000)]
+[SetFluidTension(-1000)]
+[SolveFluidCycles(10000)]
+;;Only solve for mechanical equilibrium 
+model mech active on
+model fluid active off
+[SetFluidModulus(10000)]
+;
+;Adjust Ko to be between limits
+[set_ko(0.4,2.0)]   ;call FISH function
+;
+; Solve for mechanical equilibrium
+model solve ratio 1E-4
+;
+;Adjust Ko to be between limits
+[set_ko(0.4,2.0)]
+;
+;Set stress-dependent stiffness
+[SetZoneStiffness]
+;
+;Solve for mechanical equilibrium
+model solve ratio 1E-5
+[plot_ko_alpha]   ;call FISH function
+model save '3_IniWT'
