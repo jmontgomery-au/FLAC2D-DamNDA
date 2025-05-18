@@ -41,4 +41,4 @@ These files were developed by Dr. Jack Montgomery (PE AL). Dr. Montgomery is ava
 ## Acknowledgements
 These input files were developed over a long period of time and benefited from discussion and advice from many individuals. Special thanks to Professors Ross Boulanger, Katerina Ziotopoulou, and Richard Armstrong and Dr. Michael Beaty. Portions of the development of these simulations were supported by the California Division of Safety of Dams, the United States Society on Dams, and the Itasca Educational Partnership program.Any opinions, findings, conclusions, or recommendations expressed herein are those of the author and do not necessarily represent the views of these organizations or individuals.
 
-Please send your comments, bugs, issues and suggestions for improvement to Jack Montgomeryat jmontgomery@auburn.edu.
+Please send your comments, bugs, issues and suggestions for improvement to Jack Montgomery at jmontgomery@auburn.edu.
