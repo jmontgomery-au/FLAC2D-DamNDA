@@ -1,0 +1,47 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 2: Setup analysis and build rock foundation
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+model restore '1_BuildRock' ; Restore previously saved state
+;
+; Call files for static properties and FISH functions that are used in the static analysis
+program call 'Static_Properties.dat'
+program call 'Static_Functions.dat'
+;
+; Set Mohr-Coulomb model for both alluvium and core trench 
+zone cmodel mohr-coulomb range group 'Alluvium'
+zone cmodel mohr-coulomb range group 'Core_Trench'
+; Use roller boundaries along US and DS sides
+zone gridpoint fix velocity-x 0 range group 'US_Edge' 
+zone gridpoint fix velocity-x 0 range group 'DS_Edge'
+;
+;Set Mohr-Coulomb and fluid properties for all newly created zones
+[SetMCProps]
+[SetFluidProps]
+;
+;Initialize stress conditions with an initial Ko of 0.5
+zone initialize-stress ratio 0.5
+;
+;Set pressure dependent stiffness for Mohr-Coulomb zones
+[SetZoneStiffness]
+;
+; Solve for equilibrium
+model solve
+[set_ko(0.4,2.0)]   ; Adjust Ko to limits (min = 0.4 and max = 2.0)
+model solve
+[plot_ko_alpha]   ; Store Ko and alpha for plotting
+;Save model 
+model save '2_BuildAlluvium'

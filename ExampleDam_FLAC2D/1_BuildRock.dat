@@ -1,0 +1,92 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 1: Setup analysis and build rock foundation
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+;Model Setup
+;
+;Initialization will be performed for static conditions and mechanical only
+model fluid active off
+model dyn active off
+model mech active on
+; Use small strain for initialization
+model large-strain off
+model gravity [_grav] ;
+; Define properties for the rock layer
+def _RockProps
+    RockDens = 2242 ; Density for the rock layer
+    RockShear = 1.81E9  ; Shear modulus for the rock layer
+    RockBulk  = 3.0E9   ; Bulk modulus for the rock layer
+    RockPoro = 0.2      ; Porosity for the rock layer
+    RockCond_XX = 5.0E-8   ; Hydraulic conductivity in the rock layer in the XX direction (m/s)
+    RockCond_YY = 5.0E-8   ; Hydraulic conductivity in the rock layer in the YY direction (m/s)
+    RockPerm_XX = RockCond_XX * 1.0E-6*100 ; FLAC Permeability in the rock layer in the XX direction (SI Units)
+    RockPerm_YY = RockCond_YY * 1.0E-6*100 ; FLAC Permeability in the rock layer in the YY direction (SI Units)
+end
+[_RockProps]
+
+;Assigning Properties to the Bedrock
+zone gridpoint ini saturation 0.0
+;First assign null model to all zones, so they can be added back
+def NullZones
+    if version.code.major = 900 then ; Using perpetual version
+        command
+            zone cmodel null
+        endcommand
+    else
+        command
+            zone null
+        endcommand
+    endif
+end
+[NullZones]
+; Define properties for the rock layer
+zone cmodel elastic range group 'Bedrock' ; Set elastic model for zones with group Bedrock
+zone prop density [RockDens] shear [RockShear] bulk [RockBulk] range group 'Bedrock' ;Assign elastic properties
+;Bedrock Boundary Conditions
+zone gridpoint fix vel (0,0) range group 'Base' ;Fix base of model in both x and y
+zone gridpoint fix velocity-x 0 range group 'US_Edge' ;Use roller boundaries along US and DS sides
+zone gridpoint fix velocity-x 0 range group 'DS_Edge'
+
+;Set fluid properties
+;First assign null model to all zones, so they can be added back
+def SetFluidProps
+    if version.code.major = 900 then ; Using perpetual version
+        command
+            zone fluid cmodel assign anisotropic ; Allow for anisotropic permeability
+            zone fluid prop perm-xx [RockPerm_XX] perm-yy [RockPerm_YY] porosity [RockPoro] range group 'Bedrock' ; Set permeability and porosity for bedrock
+            zone gridpoint ini saturation 1.0 range group 'Bedrock' ; Assume bedrock is always saturated
+            zone water density [_waterdens] ; Density of water
+            zone gridpoint ini fluid-modulus 0. ; Start with initial fluid modulus of zero to uncouple mechanical and pore pressure
+            zone gridpoint ini fluid-tension [-1.0*_patm] ; Set tension limit in water to 1 atm
+        endcommand
+    else
+        command
+            zone fluid prop hydraulic-conductivity-tensor ([RockCond_XX],[RockCond_YY]) range group 'Bedrock' ; Set hydraulic conductivity tensor (cond-xx,cond-yy) - cond-xy is zero
+            zone fluid prop porosity 0.2 range group 'Bedrock' ; Set porosity for bedrock
+            zone gridpoint ini saturation 1.0 range group 'Bedrock' ; Assume bedrock is always saturated
+            zone fluid prop fluid-density [_waterdens] ; Density of water
+            zone fluid prop fluid-modulus 0. ; Start with initial fluid modulus of zero to uncouple mechanical and pore pressure
+            zone fluid prop effective-cutoff [-1.0*_patm] ; Set tension limit in water to 1 atm
+        endcommand
+    endif
+end
+[SetFluidProps]
+;Initialize stress conditions using ko = 0.5
+zone initialize-stress ratio 0.5
+; Solve for equilibrium
+model solve 
+; Save model to restore in next call file
+model save '1_BuildRock'

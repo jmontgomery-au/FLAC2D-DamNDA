@@ -1,0 +1,90 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 8: Solve for earthquake shaking
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+ model restore '7_DynSetup'
+ model display active off
+ ;
+ ; Set input file for ground motion and level of record
+ fish define EQInput
+    global $duration = 28.825
+    global $fnameH = '6_M7_rock_FN_29_vel.txt'
+ end
+ [EQInput]
+ ;
+ ; Call file to set history recording locations
+ program call 'DynHisLocations.dat'
+;
+ fish define EQConst
+	;  Convert outcrop velocity motion to input stress wave
+	; $EQConst = Material Density * Vs (or Vp for normal motions)
+	local zpnt = zone.near(0,0)
+    local $dens = zone.density(zpnt) + _waterdens*zone.fluid.prop(zpnt,'porosity')
+	local $Vs = math.sqrt(zone.prop(zpnt,'shear')/$dens) ; G = rho*vs^2
+    local $ConvertUnits = 1.0
+	local $Orientation = 1.0 ; use -1.0 for positive orientation, +1.0 for negative orientation
+	global _EQConst_H = $dens*$Vs*$ConvertUnits*$Orientation
+ end
+;Import velocity time series
+table 'vel' import [$fnameH]          ; horizontal input velocity history
+;
+; Function to solve for dynamic time in a loop
+;Useful if trying to periodically run fuctions or update variables
+fish define _SolveDytime
+	$dytime = 0
+	loop while $dytime < ($duration - 0.25)
+		$dytime = $dytime + 0.25
+		; Record history every 0.01 seconds, use same interval for plot updates
+        $hist_int = math.floor(0.01/zone.dynamic.timestep())
+		command 
+			history interval [$hist_int]
+            trace interval [$hist_int]
+            model update-interval [$hist_int]
+			;Solve for next increment of time
+            model solve dynamic time-total [$dytime]
+		endcommand
+	endloop
+	; Solve until final time is reached
+    command 
+			model solve dynamic time-total [$duration]
+    endcommand
+end
+;
+; Initialize model for time, displacment, and PM4 zones
+model dynamic time-total 0.0 
+model fluid time-total 0.0
+zone gridpoint initialize displacement-x 0.0 
+zone gridpoint initialize displacement-y 0.0
+zone property First_Call 0 range cmodel 'pm4sand2d'
+zone property First_Call 0 range cmodel 'pm4silt2D'
+;
+; Set constant to apply to input wave
+[EQConst]
+; Apply velocity wave to base of model
+zone face apply stress-xy [_EQConst_H] table 'vel' range group 'Base'
+zone face apply stress-yy 0.0 table 'vel' range group 'Base'
+; Change bottom boundary to quiet boundary
+zone face apply quiet range group 'Base'
+;
+; Set free-field boundaries along the sides of the model using function from PM4 developers (https://pm4sand.engr.ucdavis.edu/pm4sand-files)
+program call 'Free_Field_w_PM4Soils.f2dat'
+[$construct_FF_w_PM4Soils]
+; Set fishcall for storing Ru and shear strain
+fish callback add [StoreRu(::zone.list)] -1000
+;
+;Solve dynamic time and save
+[_SolveDytime]
+model save '8_DynamicShake'

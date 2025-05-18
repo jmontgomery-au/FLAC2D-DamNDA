@@ -1,0 +1,88 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 4: Build embankment portion of dam in lifts based on groups
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+model restore '3_IniWT' ; Restore previously saved state
+zone gridpoint ini displacement 0 0 ;set displacement to zero in x and y direction from previously restored model
+;
+; Fuction to build dam in lifts based on the number of groups
+; Each group name should be numbered with the lowest value corresponding to first lift
+fish define BuildDam
+    loop local i (1,8) ; Loop through lifts
+        ; 
+        ; Set group names for current lift using loop counter
+        global _USShell = string.build("US_Shell_%1",i) 
+        global _Core = string.build("Core_%1",i)
+        global _DSShell = string.build("DS_Shell_%1",i)
+        command
+            ; Set Mohr-Coulomb model for groups in next lift
+            zone cmodel mohr-coulomb range group [_USShell]
+            zone cmodel mohr-coulomb range group [_Core]
+            zone cmodel mohr-coulomb range group [_DSShell]
+            ;
+            ;Set Mohr-Coulomb and fluid properties for all newly created zones
+            [SetMCProps]
+            [SetFluidProps]
+            ;Start with dry dam
+            zone gridpoint ini saturation 0.0 range group [_USShell] or [_Core] or [_DSShell] 
+            ;Initialize total stress conditions in new zones
+            zone initialize-stress ratio 0.5 range group [_USShell] or [_Core] or [_DSShell] 
+            ;Solve for mechanical equilibrium
+            model mech active on
+            model fluid active off
+            ;Fully drained analysis
+            [SetFluidModulus(0.0)]
+            ;Set stress-dependent stiffness
+            [SetZoneStiffness]
+            ;Solve for equilibrium
+            model solve ratio 1E-5
+            ;
+            [set_ko(0.4,2.0)]   ;Adjust Ko to limits
+            [SetZoneStiffness]  ;Set stress-dependent stiffness
+            model solve ratio 1E-5 ;Solve for equilibrium
+            [plot_ko_alpha]   ;Store Ko and alpha
+        endcommand
+    endloop
+    ; Build final lift using same procedure
+	command
+        zone cmodel mohr-coulomb range group 'Crest_Shell'
+        [SetMCProps]
+        [SetFluidProps]
+        ;Fluid
+        zone gridpoint ini saturation 0.0 range group 'Crest_Shell'
+        [SetMCProps]
+        ;Initialize total stress conditions in new zones
+        zone initialize-stress ratio 0.5 range group 'Crest_Shell'
+        [SetMCProps]
+        ;Solve for mechanical equilibrium
+		model mech active on
+		model fluid active off
+		;Fully drained analysis
+		[SetFluidModulus(0.0)]
+		;Set stress-dependent stiffness
+		[SetZoneStiffness]
+		;Solve for equilibrium
+		model solve ratio 1E-5
+		;
+		[set_ko(0.4,2.0)]   ;Adjust Ko to limits
+		[SetZoneStiffness]  ;Set stress-dependent stiffness
+		model solve ratio 1E-5 ;Solve for equilibrium
+		[plot_ko_alpha]   ;Store Ko and alpha
+;        ;
+   endcommand
+end
+[BuildDam]
+model save '4_BuildDam'

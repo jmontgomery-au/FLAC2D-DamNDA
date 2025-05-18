@@ -1,0 +1,9 @@
+fish define DefineProps
+    lst_ind = 0 ;reset list index
+    loop foreach local zpnt zone.list
+        lst_ind = lst_ind + 1 ;Increment list index to match number of zones
+        global z_group = zone.group(zpnt,"Construction")
+        zone.group(zpnt,"Default") = z_group
+    endloop
+end
+[DefineProps]

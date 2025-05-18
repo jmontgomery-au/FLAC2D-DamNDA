@@ -1,0 +1,121 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 6: Raise reservoir in stages
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+model restore '5_AddBerm'
+;
+;Set internal pore pressures (toe drain)
+zone gridpoint ini p-p 0.0 range pos-x 100 106 pos-y 152. 155.
+zone gridpoint fix p-p range pos-x 100 106 pos-y 152. 155.
+;
+; Fuction to raise reservoir in stages
+;
+fish define RaiseRes
+	;User Inputs to define reservoir level and inital guess at phreatic surface
+    global ResStages = 8		; Set number of stages to raise the reservoir (may require interation to achieve good results)
+	global FinResElev = 190.1	; Set final reservoir elevation
+	global USToeElev = 155	; Set elevation of the US Toe of the shell (used for pressure calculations on US Face and initializing pore pressure)
+	global BaseElev = 130		; Set elevation of the base of the model (used to calculate maximum pore pressure)
+	global xUSEdge = -200		; Set x-coordinate for US Edge of model where constant head boundary is applied
+	global xLDupuit = -30		; Set the upstream coordinate used for the Dupuit calculation for initializing pore pressures (may require iteration to find good value)
+	global xRDupuit = 75		; Set the downstream coordinate used for the Dupuit calculation for initializing pore pressures (may require iteration to find good value)
+	global hRDupuit = 153		; Set the total head at the downstream coordinate used for the Dupuit calculation for initializing pore pressures (may require iteration to find good value)
+	
+	loop local i (1,(ResStages - 1))
+	; Sets current reservoir elevation based on linear interpolation between elevation of the toe of the US shell and final height
+		
+        global _CurRes = i*(FinResElev - USToeElev)/(ResStages) + USToeElev
+        command
+            ; Solve fluid only to start with
+            model fluid active on
+            model mech active off
+            ; 
+            ; Update boundary conditions to match new reservoir elevation
+            [update_WT((_CurRes),USToeElev,BaseElev,xUSEdge,xLDupuit,xRDupuit,hRDupuit,_waterUW)]
+            ;
+            ; Set low fluid modulus to speed convergence
+            [SetFluidModulus(100)]
+            ;Solve fluid calculations
+            [SolveFluidCycles(50000)]
+            ;
+            ;
+            ;Solve mechanical only with fully drained conditions
+            model mech active on
+            model fluid active off
+            [SetFluidModulus(0.0)]
+            model solve
+			; Adjust Ko to limits specified by user and store after solving
+            [set_ko(0.4,2.0)]
+            model solve
+            [plot_ko_alpha]
+            ;
+            ;Solve fluid again with increased modulus
+            model mech active off
+            model fluid active on
+            ;
+            [SetFluidModulus(10000)]
+            [SolveFluidCycles(50000)]
+            ;
+        endcommand
+    endloop
+
+        command
+
+            ; Solve fluid only to start with
+            model fluid active on
+            model mech active off
+            ;
+            ; Update boundary conditions to match new reservoir elevation
+            [update_WT(FinResElev,USToeElev,BaseElev,xUSEdge,xLDupuit,xRDupuit,hRDupuit,_waterUW)]
+            ;
+            ; Set low fluid modulus to speed convergence
+            [SetFluidModulus(1000)]
+            ;Solve fluid calculations
+            [SolveFluidCycles(50000)]
+            ;
+            ;
+            ;Solve mechanical only with fully drained conditions
+            model mech active on
+            model fluid active off
+            ;
+            [SetFluidModulus(0.0)]
+            model solve
+            ; Adjust Ko to limits specified by user and store after solving
+            [set_ko(0.4,2.0)]
+            model solve
+            [plot_ko_alpha]
+            ;
+            ;Solve fluid again with increased modulus
+            model mech active off
+            model fluid active on
+            ;
+            [SetFluidModulus(10000)]
+            [SolveFluidCycles(50000)]
+            ;
+      endcommand
+end
+[RaiseRes]
+;
+;Solve for fully coupled equilibrium with full fluid modulus
+model mech active on
+model fluid active on
+[SetFluidModulus(5.0E8)]
+model solve
+; Adjust Ko to limits specified by user and store after solving
+[set_ko(0.4,2.0)]   ;call FISH function
+model solve
+[plot_ko_alpha]   ;call FISH function
+model save '6_RaiseRes'

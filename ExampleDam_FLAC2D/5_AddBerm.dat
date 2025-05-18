@@ -1,0 +1,52 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 5: Add DS berm in lifts based on groups
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+model restore '4_BuildDam'
+;
+; Fuction to build berm in lifts based on the number of groups
+; Each group name should be numbered with the lowest value corresponding to first lift
+; Follows same approach as BuildDam
+fish define AddBerm
+    loop local i (1,4)
+        global _Berm = string.build("Berm_%1",i) 
+        command
+            zone cmodel mohr-coulomb range group [_Berm]
+            [SetMCProps]
+            [SetFluidProps]
+            ;Fluid
+            zone gridpoint ini saturation 0.0 range group [_Berm] 
+            ;Initialize total stress conditions in new zones
+            zone initialize-stress ratio 0.5 range group [_Berm]
+			;Solve for mechanical equilibrium
+            model mech active on
+            model fluid active off
+            ;Fully drained analysis
+            [SetFluidModulus(0.0)]
+            ;Set stress-dependent stiffness
+            [SetZoneStiffness]
+            ;Solve for equilibrium
+            model solve ratio 1E-5
+            ;
+            [set_ko(0.4,2.0)]   ;Adjust Ko to limits
+            [SetZoneStiffness]  ;Set stress-dependent stiffness
+            model solve ratio 1E-5 ;Solve for equilibrium
+            [plot_ko_alpha]   ;Store Ko and alpha 
+        endcommand
+    endloop
+end
+[AddBerm]
+model save '5_AddBerm'

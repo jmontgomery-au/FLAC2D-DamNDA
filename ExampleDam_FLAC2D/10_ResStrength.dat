@@ -1,0 +1,131 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;  Call File 10: Assign residual strengths to liquefied zones and solve
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised February 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+model restore '9_QuietTime'
+; Reduce strength in PM4Silt elements by 20% for post-shaking
+zone prop Su_factor 0.8
+; Create lists for storing zone properties
+[global z_gliq = list.create(list.size(zone.list),1.0)] ; Reduction in shear modulus for liquefied elements, Default value is 1.0 meaning no reduction
+[global z_N160sr = list.create(list.size(zone.list))] ; Blowcount for assigning residual strength
+[global z_LiqSr = list.create(list.size(zone.list))] ; Residual strength for assigning to Mohr-Coulomb
+;
+; Define residual strength properties and store in lists for each liquefiable zone
+fish define DefinePSProps
+    global _PSTime = 30.0	; Amount of post-shaking time to solve for
+    global _StrainLiq = 0.08	; Strain criterion for determining liquefied elements, program assumes this value is the engineering shear strain [sqrt(4*J2')]
+    global _ruLiq = 0.7			; Excess pore pressure criterion for determining liquefied elements, ru = 1 - sigv'/sigvo'
+    lst_ind = 0 ;reset list index
+    loop foreach local zpnt zone.list ; Loop through everyone zone in the model
+        lst_ind = lst_ind + 1 ;Increment list index to match number of zones
+        global z_group = zone.group(zpnt,"Default") ; Pulls the group name in the Default slot, will be used to assign properties
+         if string.find(z_group,"Shell") # 0 then ;Group is Shell
+            z_gliq(lst_ind) = 0.3  ;Reduction in modulus for liquefied elements
+            z_N160sr(lst_ind) = 25  ;Set yy permeability in FLAC units
+        endif
+        if string.find(z_group,"Alluvium") # 0 then ;Group is Alluvium
+            z_gliq(lst_ind) = 0.3  ;Reduction in modulus for liquefied elements
+            z_N160sr(lst_ind) = 15  ;Set yy permeability in FLAC units
+        endif
+        ;
+        local sigv0 = math.max(zone.extra(zpnt,3),_minstress) ; Pull vertical effective stress from before shaking, but do not allow to go lower than minimum stress
+        local drnstr = sigv0*math.tan(z_fric(lst_ind)*math.degrad) ;Compute drained strength using pre-earthquake stress
+        zone.extra(zpnt,10) = drnstr
+        local mean_stress = -1.0*(zone.stress.effective.yy(zpnt) + zone.stress.effective.xx(zpnt) + zone.stress.effective.zz(zpnt))/3.0 ; Compute current mean stress in zone
+        mean_stress = math.max(_minstress,mean_stress)
+		; Compute properties for each 
+        ; Read Vs1 (stress normalized shear wave velocity) from list and convert to Vs using current mean stress
+        local vs = z_vs1(lst_ind)*(mean_stress/_patm)^(z_vsexp(lst_ind)) ; Vs = Vs1*(sigm'/patm)^exp
+        local g_max = (vs*vs)*z_dens(lst_ind) ;Max shear mod = Density * Vs^2 
+        local z_gcur = g_max * z_gred(lst_ind) ;Reduce shear modulus by reduction factor used for construction
+        local z_kcur = z_gcur * (2*(1+z_pois(lst_ind))/(3*(1-2*z_pois(lst_ind)))) ; Set bulk modulus based on shear modulus and stored poisson's ratio
+        zone.extra(zpnt,12) = z_gcur
+        zone.extra(zpnt,13) = z_kcur 
+    endloop
+end
+[DefinePSProps]
+;
+;Operator Function: CheckLiq
+;Inputs: zone pointer
+;Purpose: Compares shear strain and Maximum Ru to set limits to determine which zones have liquefied (only used for PM4Sand zones)
+;
+;Operator function, so should be called using [CheckLiq(::zone.list)]
+; User must set _StrainLiq (strain criterion for liquefaction) and _ruLiq (excess pore pressure criterion for liquefaction) as global variables
+; Will assign groups in 'PostShake' slot to avoid overwriting other groups
+fish operator CheckLiq(zpnt)
+    if zone.model(zpnt) = 'pm4sand2d' & zone.extra(zpnt,4) >= 1.0 then
+        local _EngShearStr = 2.0 * zone.strain.shear.inc(zpnt) ;Flac stores sqrt(J2') in SSI, need sqrt(4*J2') for engineering strain
+        zone.extra(zpnt,7) = _EngShearStr ; Update stored shear strain to match current value
+        local _MaxRu = zone.extra(zpnt,6) ; Pull maximum ru value from shaking 
+		; Check shear strain against liquefaction criterion and update group name if element has liquefied
+        if _EngShearStr >= _StrainLiq then
+            zone.group(zpnt,'PostShake') = 'Liq_SS'
+        endif
+		; Check excess pore pressures against liquefaction criterion and update group name if element has liquefied
+        if _MaxRu >= _ruLiq then
+            zone.group(zpnt,'PostShake') = 'Liq_Ru'
+        endif
+    endif
+end
+[CheckLiq(::zone.list)]
+;
+;Convert liquefied elements to Mohr-Coulomb
+zone cmodel mohr-coulomb range group 'PostShake=Liq_SS' 
+zone cmodel mohr-coulomb range group 'PostShake=Liq_Ru' 
+;
+; Calculate residual strength and assign to each liquefied zone
+; Liquefied zones should be set to Mohr-Coulomb and the group name for the 'PostShake' slot should start with "Liq"
+fish define AssignLiq
+    lst_ind = 0 ;reset list index
+    loop foreach local zpnt zone.list ; Loop through all zones
+        lst_ind = lst_ind + 1 ;Increment list index to match number of zones
+        if zone.model(zpnt) = 'mohr-coulomb' & string.find((zone.group(zpnt,"PostShake")),"Liq") # 0 then;find mohr-coulomb zones in a liquefied group
+			local drnstr = zone.extra(zpnt,10) ;Pull drained strength
+            local sigv0 = math.max(zone.extra(zpnt,3),_minstress) ; Pull vertical effective stress from before shaking, but do not allow to go lower than minimum stress
+            local _N160Sr = z_N160sr(lst_ind) ; Locally store blowcount for residual strength calculation
+            ;
+            ; Calculate residual strength ratio and store in extra variable 8. Limit to drained strength
+            global Sr_IandB  = math.min(math.exp(_N160Sr/16.+((_N160Sr-16.)/21.2)^3-3.),math.tan(z_fric(lst_ind)*math.degrad))
+            zone.extra(zpnt,8) = Sr_IandB
+            local Sr_Assign  = sigv0 * Sr_IandB
+			z_LiqSr(lst_ind) = math.min(Sr_Assign,drnstr) ; Ensure that residual strength is less than drained strength
+            zone.extra(zpnt,11) = z_LiqSr(lst_ind)
+            ;
+            local g_cur =  zone.extra(zpnt,12)/ z_gred(lst_ind) * z_gliq(lst_ind) ; Reduce modulus due to liquefaction
+            local k_cur = g_cur * (2*(1+z_pois(lst_ind))/(3*(1-2*z_pois(lst_ind))))
+            ;
+            zone.extra(zpnt,12) = g_cur
+            zone.extra(zpnt,13) = k_cur 
+            ;Assign properties to liquefied elements
+            zone.prop(zpnt,'shear') = g_cur  ;Set shear
+            zone.prop(zpnt,'bulk') = k_cur     ;Set bulk
+            zone.prop(zpnt, 'density') = z_dens(lst_ind)   ;Set density for zero saturation
+            zone.prop(zpnt,'cohesion') = z_LiqSr(lst_ind)  ;Set cohesion
+            zone.prop(zpnt,'friction') = 0.0     ;Set friction angle
+            zone.prop(zpnt,'dilation') = 0.0      ;Set dilation angle
+            zone.prop(zpnt,'tension') = z_tens(lst_ind)      ;Set tension limit
+        endif
+    endloop
+end
+[AssignLiq]
+;
+;Set error tolerance for bad geometry
+zone geometry-tolerance 0.01
+; Solve for additional amount of dynamic time
+model solve dynamic time [_PSTime]
+model save '10_ResStrength'
+
+

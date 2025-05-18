@@ -1,0 +1,290 @@
+;--------------------------------------------------------
+;   Seismic Analysis of a dam - FLAC2D
+;
+;Collection of functions used primarily in the static analysis
+;		
+;		
+;   Prepared by Jack Montgomery, jmontgomery@auburn.edu
+;      October 2024 - Revised May 2025
+;--------------------------------------------------------
+;
+;License information and the latest version of these files can be found at:
+;https://github.com/jmontgomery-au/
+
+;--------------------------------------------------------
+;  Units: Pa, kg, m, s
+;  
+;--------------------------------------------------------
+
+;
+;Function: SetMCProps
+;Inputs: None
+;Purpose: Sets Mohr-Coulomb properties in all zones without current properties (as checked by a density of zero)
+;
+;Loops through all zones and sets properties for each zone with a Mohr-Coulomb model and no density
+;Requires that properties are stored in a FISH list that has the same order as the list of zones used by FLAC
+;The lists are created and filled with properties in Static_Properties.dat
+fish define SetMCProps
+    lst_ind = 0 ;reset list index
+    loop foreach local zpnt zone.list
+        lst_ind = lst_ind + 1 ;Increment list index to match number of zones
+        if zone.model(zpnt) = 'mohr-coulomb' & zone.density(zpnt) = 0 ;find newly created mohr-coulomb zones (i.e., without denisty)
+            zone.prop(zpnt, 'density') = z_dens(lst_ind)   ;Set density for zero saturation
+            zone.prop(zpnt,'cohesion') = z_coh(lst_ind)  ;Set cohesion
+            zone.prop(zpnt,'friction') = z_fric(lst_ind)     ;Set friction angle
+            zone.prop(zpnt,'dilation') = z_dila(lst_ind)      ;Set dilation angle
+            zone.prop(zpnt,'tension') = z_tens(lst_ind)      ;Set tension limit
+        endif
+    endloop
+end
+;
+;Function: SolveFluidCycles
+;Inputs: fcycles
+;Purpose: Solves fluid only calculations for the specified number of cycles (fcycles)
+;Allows for different commands for different versions
+fish define SolveFluidCycles(fcycles)
+    if version.code.major = 900 then ; Using perpetual version
+        command
+            ;Solve fluid calculations
+            model solve fluid cycles [fcycles]
+        endcommand
+    else
+        command
+            ;Solve fluid calculations
+            model solve-fluid cycles [fcycles]
+        endcommand
+    endif
+end
+;
+;Function: SetFluidModulus
+;Inputs: fmod
+;Purpose: Sets bulk modulus of the fluid in all zones to the provided value (fmod)
+;Allows for different commands for different versions
+fish define SetFluidModulus(fmod)
+    if version.code.major = 900 then ; Using perpetual version
+        command
+            ;Set fluid properties with desired modulus
+            zone gridpoint ini fluid-modulus [fmod]
+        endcommand
+    else
+        command
+            ;Set fluid properties with desired modulus
+            zone fluid prop fluid-modulus [fmod]
+        endcommand
+    endif
+end
+;
+;Function: SetFluidTension
+;Inputs: ftens
+;Purpose: Sets tensile capacity of the fluid in all zones to the provided value (ftens)
+;Allows for different commands for different versions
+fish define SetFluidTension(ftens)
+    if version.code.major = 900 then ; Using perpetual version
+        command
+            ;Set fluid properties with desired tensile capacity of water
+            zone gridpoint ini fluid-tension [ftens]
+        endcommand
+    else
+        command
+            ;Set fluid properties with desired tensile capacity of water
+            ;Set unsaturated solution process with new cutoff
+            zone fluid unsaturated cutoff [ftens]
+            zone fluid prop effective-cutoff [ftens]
+        endcommand
+    endif
+end
+;
+;Function: SetFluidProps
+;Inputs: None
+;Purpose: Sets permeability and porosity in all zones without current fluid properties (as checked by a perm-xx of zero)
+;
+;Loops through all zones and sets properties for each non-null zone with a zero for conductivity-xx
+;Requires that properties are stored in a FISH list that has the same order as the list of zones used by FLAC
+;The lists are created and filled with properties in Static_Properties.dat
+fish define SetFluidProps
+    lst_ind = 0 ;reset list index
+    loop foreach local zpnt zone.list
+        lst_ind = lst_ind + 1 ;Increment list index to match number of zones
+        if version.code.major = 900 then ; Using perpetual version
+            if zone.model(zpnt) # 'null' & zone.fluid.prop(zpnt,'hydraulic-conductivity-xx') = 0 ; find newly created non-null zones (i.e., without conductivity)
+                zone.fluid.prop(zpnt,'porosity') = z_poro(lst_ind) ;Set porosity
+                
+                zone.fluid.prop(zpnt,'hydraulic-conductivity-xx') = z_cond_xx(lst_ind)    ;Set xx hydraulic conductivity
+                zone.fluid.prop(zpnt,'hydraulic-conductivity-yy') = z_cond_yy(lst_ind)    ;Set yy hydraulic conductivity
+            endif
+        else
+            if zone.model(zpnt) # 'null' & zone.fluid.prop(zpnt,'hydraulic-conductivity') = 0 ;find newly created non-null zones (i.e., without conductivity)
+                zone.fluid.prop(zpnt,'porosity') = z_poro(lst_ind) ;Set porosity
+                command
+                    zone fluid prop hydraulic-conductivity-tensor ([z_cond_xx(lst_ind)],[z_cond_yy(lst_ind)]) range id [zone.id(zpnt)]  ;Set hydraulic conductivity tensor (xx,yy) - assumes xy = 0
+                endcommand
+            endif
+        endif
+    endloop
+end
+;
+;
+;Function: SetZoneStiffness
+;Inputs: None
+;Purpose: Sets shear modulus and bulk modulus using current mean stress in all Mohr-Coulomb and strain-softening zones
+;
+;Loops through all zones and sets moduli for each Mohr-Coulomb and strain-softening zone
+;Requires that properties are stored in a FISH list that has the same order as the list of zones used by FLAC
+;The lists are created and filled with properties in Static_Properties.dat
+fish define SetZoneStiffness 
+    lst_ind = 0 ; reset list index
+    loop foreach local zpnt zone.list
+        lst_ind = lst_ind + 1 ;Increment list index to match number of zones
+        if zone.model(zpnt) = 'mohr-coulomb' or zone.model(zpnt) = 'strain-softening' ; Only used for M-C and strain-softening currently
+            ;Comput mean effective stress in zone and ensure that it is greater than minimum stress
+            local mean_stress = -1.0*(zone.stress.effective.yy(zpnt) + zone.stress.effective.xx(zpnt) + zone.stress.effective.zz(zpnt))/3.0
+            mean_stress = math.max(_minstress,mean_stress)
+            ; Read Vs1 (stress normalized shear wave velocity) from list and convert to Vs
+            local vs = z_vs1(lst_ind)*(mean_stress/_patm)^(z_vsexp(lst_ind)) ; Vs = Vs1*(sigm'/patm)^exp
+            local g_max = (vs*vs)*z_dens(lst_ind) ;Max shear mod = Density * Vs^2 
+            local g_cur = g_max * z_gred(lst_ind) ;Reduce shear modulus by reduction factor used for construction
+            local k_cur = g_cur * (2*(1+z_pois(lst_ind))/(3*(1-2*z_pois(lst_ind)))) ; Set bulk modulus based on shear modulus and stored poisson's ratio
+            zone.prop(zpnt,'shear') = g_cur  ;Set shear
+            zone.prop(zpnt,'bulk') = k_cur     ;Set bulk
+        endif
+    endloop
+end
+;
+;
+;Function: set_ko
+;Inputs: min_ko - Minimum Ko value for model
+;        max_ko - Maximum Ko value for model
+;Purpose: Sets horizontal total stress to maintain limits on Ko set by user
+;
+;Loops through all zones and checks current Ko for any non-null zones
+;If Ko is greater than maximum or less than minimum, the horizontal total stress is updated to match limits
+;User must specify Ko limits when fuction is called. Model should be solved for equilibrium after calling function
+fish define set_ko(min_ko, max_ko)
+    loop foreach local zpnt zone.list
+        if zone.model(zpnt) # 'null' then
+            local esyy = zone.stress.effective.yy(zpnt) ;esyy = effective stress in y direction
+            local esxx = zone.stress.effective.xx(zpnt) ;esxx = effective stress in x direction
+            local zpp = zone.pp(zpnt) ; pore pressure in zone
+            local ko = esxx/esyy ; compute Ko = esxx/esyy
+            local new_ko = math.max(min_ko,math.min(max_ko,ko)) ; Set Ko to be between limits
+            ; If current ko is not equal to the new ko (adjusted for limits), update the total stress
+            if ko # new_ko then
+                zone.stress.xx(zpnt) = esyy*new_ko - zpp 
+                zone.stress.zz(zpnt) = esyy*new_ko - zpp
+            endif
+        endif
+    endloop
+end
+;
+;
+;Function: plot_ko_alpha
+;Inputs: None
+;Purpose: Stores current ko in extra variable 1 and alpha in extra variable 2 
+;
+;Loops through all zones and computes Ko and alpha for non-null zones. Values stored in extra variables for zones
+fish define plot_ko_alpha
+    loop foreach local zpnt zone.list
+        if zone.model(zpnt) # 'null' then
+            local esyy = zone.stress.effective.yy(zpnt) ;esyy = effective stress in y direction
+            local esxx = zone.stress.effective.xx(zpnt) ;esxx = effective stress in x direction
+            local sxy = zone.stress.xy(zpnt) ;sxy: shear stress
+            local ko = esxx/esyy ; compute Ko = esxx/esyy
+            local alpha = math.abs(sxy/esyy) ; compute static shear stress ratio, alpha = sxy/esyy
+            zone.extra(zpnt,1) = ko
+            zone.extra(zpnt,2) = alpha
+        endif
+    endloop
+end
+;
+;
+;Function: FindSurf
+;Inputs: groupname
+;Purpose: Finds maximum elevation for all gridpoints within a group 
+;
+;User must give group name and function will find the maximum y-coordinate for all gridpoints that are part of group
+;Maximum y-coordinate is stored in global variable GP_Max_Elev
+fish define FindSurf(groupName)
+    local ingroup = gp.isgroup(::gp.list,groupName) ; Boolean list, true if gridpoint
+                                                    ; in current group
+    local gpsin = gp.list(ingroup) ; Creates list with only those gridpoints that are
+                                   ; part of group
+    global GP_Max_Elev = list.max(gp.pos(::gpsin)->y) ; Find max y-coordinate for all gridpoints in list
+end
+;
+;
+;Function: ini_GPP_Dupuit
+;Inputs:    h1 should be the total head at the x coordinate corresponding to x_start
+;           h2 should be the total head at the x coordinate x_start + L
+;           x1 is the x coordinate for the h1 boundary
+;           x2 is the x coordinate for the h2 boundary
+;           gamma_w is unit weight of water
+;Purpose: Sets gridpoint pore pressure based on the Dupuit equation for unconfined flow in an aquifer
+;
+; Loops through all zones in the model and sets the gridpoint pore pressure for all non-null zones 
+; and zones with a centroid lower than h1. Does not set negative pore pressures
+; Any zones that are before x1 are set using h1, while any zones beyond x2 are set using h2
+fish define ini_GPP_Dupuit(h1,h2,x1,x2,gamma_w)
+    local h1_sq = h1*h1 ; square h1
+    local L = x2 - x1 ; Total length for unconfined portion
+    local Ld2 = L/2.0 ; Mid distance
+    local h2mh1_sq = (h2*h2 - h1_sq)/L ; Compute (h2^2 - h1^2)/Length
+    loop foreach local zpnt zone.list
+        if zone.model(zpnt) # 'null' & zone.pos.y(zpnt) <= h1  then ; Find all zones that are non-null and have a centroid below h1
+            loop foreach local gpnt zone.gp(zpnt) ; Loop through all gridpoints in each zone
+                if gp.pos.x(gpnt) >= x1 & gp.pos.x(gpnt) <= x2 ; If gridpoint is between limits then use Dupuit Equation
+                    local x_dist = gp.pos.x(gpnt) - x1 ; Compute x distance to current point
+                    ; Compute gridppoint pore pressure based on pressure head at each point (h_Dupuit - h_elev)*gamma_w
+                    local gp_pp = (math.sqrt(h1_sq+h2mh1_sq*(x_dist)) - gp.pos.y(gpnt))*gamma_w ; h_Dupuit = h1^2 + (h2^2 - h1^2)/Length*x
+                else ; If gridpoint is not between limits
+                    if gp.pos.x(gpnt) < x1
+                        gp_pp = (h1- gp.pos.y(gpnt))*gamma_w ; Use h1 for total head for all points that are before x1
+                    else
+                        gp_pp = (h2- gp.pos.y(gpnt))*gamma_w ; Use h2 for total head for all points that are beyond x2
+                    endif
+                endif
+                if gp_pp > 0.0 ; If computed gridpoint is greater than zero, set pore pressure and saturate gridpoint 
+                    gp.sat(gpnt) = 1.0
+                    gp.pp(gpnt) = gp_pp
+                endif
+            endloop
+        endif
+    endloop
+end
+;
+;Function: update_WT
+;Inputs:    y_res should be elevation of current reservoir level
+;           y_toe should be elevation of the upstream toe (used for pressure calculations)
+;           y_base is the elevation along the base of the model
+;           x_start is the x coordinate for upstream constant head boundary
+;           xL is the upstream coordinate used for the Dupuit calculation for initializing pore pressures (may require iteration to find good value)
+;           xR is the downstream coordinate used for the Dupuit calculation for initializing pore pressures (may require iteration to find good value)
+;			hR is the total head at the downstream coordinate used for the Dupuit calculation for initializing pore pressures (may require iteration to find good value)
+;           gamma_w is unit weight of water
+;Purpose: Updates US boundary conditions to match new reservoir elevation and initializes gridpoint pore pressures
+;
+;   Boundary conditions are constant head along US edge of model and US face and reservoir pressure along US face and toe
+;   Assumes horizontal bottom boundary and vertical side boundaries
+;   Assumes first raise will add pooled reservoir to the toe
+; NOTE: Has not been tested with irregular ground surface beyond US Toe. Need to check calculations if elevation is not constant along US ground surface
+fish define update_WT(y_res,y_toe,y_base,x_start,xL,xR,hR,gamma_w)
+
+    global pp_start = (y_res - y_base)*gamma_w ;Calculate pore pressure at edge of model
+    global res_pres = (y_res - y_toe)*gamma_w ;Calculate pressure from weight of reservoir
+    
+    command
+        ; Initialize gridpoint pore pressure along US edge and fix it
+        zone gridpoint ini p-p [pp_start] gradient 0. [-1.0*gamma_w] origin ([x_start],[y_base]) range pos-x [x_start-0.1] [x_start+0.1] pos-y [y_base] [y_toe]
+        zone gridpoint fix p-p range pos-x [x_start-0.1] [x_start+0.1] pos-y [y_base] [y_toe]
+        ; Apply constant head to US face and to ground surface beyond US toe of dam
+        ; Requires that faces are assigned group names
+        zone face apply head [y_res] range pos-y [y_base] [y_res] group 'US_GS' or 'US_Face'
+        ; Apply reservoir pressure to US face and to ground surface beyond US toe of dam
+        ; Requires that faces are assigned group names
+        zone face apply-remove stress-normal range pos-y [y_base] [y_res] group 'US_GS' or 'US_Face'
+        zone face apply stress-normal [-1.0*res_pres] gradient 0. [1.0*gamma_w] origin ([x_start],[y_toe]) range pos-y [y_base] [y_res] group 'US_GS' or 'US_Face'
+    endcommand
+    ;
+    ; Initialize pore pressure using Dupuit unconfined flow equation
+    ini_GPP_Dupuit(y_res,hR,xL,xR,gamma_w)
+end
+;
